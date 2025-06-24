@@ -1,8 +1,9 @@
-import json  # Ensure the import is used
+import json
 from json import load, dump
 from dotenv import dotenv_values
 import requests
 import datetime
+from Backend.Utils import AnswerModifier
 from groq import Groq
 
 env_vars = dotenv_values(".env")
@@ -19,6 +20,7 @@ System = f"""Hello, I am {Username}, You are a very accurate and advanced AI cha
 *** Do not tell time until I ask, do not talk too much, just answer the question.***
 *** Reply in only English, even if the question is in Hindi, reply in English.***
 *** Do not provide notes in the output, just answer the question and never mention your training data. ***
+*** You are JARVIS, an advanced AI assistant. Be professional, intelligent, and helpful. ***
 """
 
 SystemChatBot = [
@@ -50,12 +52,6 @@ def RealtimeInformation():
     data += f"Day: {day}\nDate: {date}\nMonth: {month}\nYear: {year}\n"
     data += f"Time: {hour} hours, {minute} minutes, {second} seconds.\n"
     return data
-
-def AnswerModifier(Answer):
-    lines = Answer.split('\n')
-    non_empty_lines = [line for line in lines if line.strip()]
-    modified_answer = '\n'.join(non_empty_lines)
-    return modified_answer
 
 def ChatBot(Query):
     """ This function sends the user's query to the chatbot and returns the AI's response """
@@ -89,7 +85,7 @@ def ChatBot(Query):
         with open(r"Data\ChatLog.json", "w") as f:
             dump(messages, f, indent=4)
 
-        return Answer  # Return the answer to the main function
+        return AnswerModifier(Answer)
 
     except requests.exceptions.RequestException as e:
         print(f"Connection error: {e}")
@@ -106,4 +102,4 @@ if __name__ == "__main__":
     while True:
         user_input = input("Enter Your Question: ")
         response = ChatBot(user_input)
-        print(response)  # Print the response to the user
+        print(response)

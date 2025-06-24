@@ -9,8 +9,14 @@ rich
 requests
 keyboard
 cohere
-googlesearch-pythonselenium
+googlesearch-python
 pygame
 edge-tts
 PyQt5
 webdriver-manager
+selenium
+mtranslate
+opencv-python
+face-recognition
+speechrecognition
+pyaudio

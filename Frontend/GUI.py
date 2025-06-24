@@ -1,113 +1,168 @@
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTextEdit, QStackedWidget, QWidget, QLineEdit, QGridLayout, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QLabel, QSizePolicy)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTextEdit, QStackedWidget, QWidget, QLineEdit, QGridLayout, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QLabel, QSizePolicy, QProgressBar)
 from PyQt5.QtGui import QIcon, QPainter, QMovie, QColor, QTextCharFormat, QFont, QPixmap, QTextBlockFormat
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from dotenv import dotenv_values
 import sys
 import os
+import queue
+import threading
 
 # Load environment variables
 env_vars = dotenv_values(".env")
-Assistantname = env_vars.get("Assistantname")
-old_chat_message = ""
+Assistantname = env_vars.get("Assistantname", "JARVIS")
+Username = env_vars.get("Username", "User")
+
 # Directory paths
 current_dir = os.getcwd()
 TempDirPath = rf"{current_dir}\Frontend\Files"
 GraphicsDirPath = rf"{current_dir}\Frontend\Graphics"
 
-def AnswerModifier(Answer):
-    lines = Answer.split('\n')
-    non_empty_lines = [line.strip() for line in lines if line.strip()]
-    modified_answer = '\n'.join(non_empty_lines)
-    return modified_answer
-
-
-def QueryModifier(Query):
-    new_query = Query.lower().strip()
-    query_words  = new_query.split()
-    question_words = ['how','what','who','where','when','why','which','whom','can you',"what's", "where's","how's"]
-
-    if any(word + " " in new_query for word in question_words):
-        if query_words[-1][-1] in ['.','?','!']:
-            new_query = new_query[:-1] + "?"
-        else:
-            new_query += "?"
-    else:
-        if query_words[-1][-1] in ['.','?','!']:
-            new_query = new_query[:-1] + '.'
-        else:
-            new_query += '.'
-
-    return new_query.capitalize()
-
-
-def SetMicrophoneStatus(Command):
-    with open(TempDirectoryPath('Mic.data'), 'w', encoding='utf-8') as file:
-        file.write(Command)
+class AuthenticationScreen(QWidget):
+    def __init__(self, parent=None, on_success=None):
+        super().__init__(parent)
+        self.on_success = on_success
+        self.initUI()
+        
+    def initUI(self):
+        desktop = QApplication.desktop()
+        screen_width = desktop.screenGeometry().width()
+        screen_height = desktop.screenGeometry().height()
+        
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        # Title
+        title = QLabel("JARVIS AUTHENTICATION")
+        title.setStyleSheet("""
+            color: #00FFFF;
+            font-size: 36px;
+            font-weight: bold;
+            font-family: 'Courier New';
+            margin-bottom: 30px;
+        """)
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+        
+        # Status label
+        self.status_label = QLabel("Initializing face recognition...")
+        self.status_label.setStyleSheet("""
+            color: white;
+            font-size: 18px;
+            font-family: 'Courier New';
+            margin-bottom: 20px;
+        """)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #00FFFF;
+                border-radius: 5px;
+                text-align: center;
+                background-color: black;
+                color: white;
+                font-size: 14px;
+            }
+            QProgressBar::chunk {
+                background-color: #00FFFF;
+                border-radius: 3px;
+            }
+        """)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        # Instructions
+        instructions = QLabel("Look directly at the camera for authentication")
+        instructions.setStyleSheet("""
+            color: #CCCCCC;
+            font-size: 16px;
+            font-family: 'Courier New';
+            margin-top: 20px;
+        """)
+        instructions.setAlignment(Qt.AlignCenter)
+        layout.addWidget(instructions)
+        
+        # Skip button (for testing)
+        skip_button = QPushButton("Skip Authentication (Testing)")
+        skip_button.setStyleSheet("""
+            QPushButton {
+                background-color: #333333;
+                color: white;
+                border: 2px solid #666666;
+                padding: 10px 20px;
+                font-size: 14px;
+                border-radius: 5px;
+                margin-top: 30px;
+            }
+            QPushButton:hover {
+                background-color: #555555;
+                border-color: #888888;
+            }
+        """)
+        skip_button.clicked.connect(self.skip_authentication)
+        layout.addWidget(skip_button)
+        
+        self.setLayout(layout)
+        self.setFixedHeight(screen_height)
+        self.setFixedWidth(screen_width)
+        self.setStyleSheet("background-color: black;")
+        
+        # Start authentication timer
+        self.auth_timer = QTimer()
+        self.auth_timer.timeout.connect(self.update_progress)
+        self.auth_timer.start(100)
+        self.progress_value = 0
+        
+    def update_progress(self):
+        self.progress_value += 2
+        self.progress_bar.setValue(self.progress_value)
+        
+        if self.progress_value >= 100:
+            self.auth_timer.stop()
+            self.authenticate()
     
-
-def GetMicrophoneStatus():
+    def authenticate(self):
+        # Simulate authentication process
+        self.status_label.setText("Authentication successful!")
+        QTimer.singleShot(1000, self.on_success)
     
-    with open(TempDirectoryPath('Mic.data'), 'r', encoding='utf-8') as file:
-        Status = file.read().strip()
-    return Status
+    def skip_authentication(self):
+        self.on_success()
 
-
-def SetAsssistantStatus(Status):
-    with open(rf'{TempDirPath}\Status.data','w',encoding='utf-8') as file:
-        file.write(Status)
-
-
-def GetAssistantStatus():
-    with open(rf'{TempDirPath}\Status.data', 'r', encoding='utf-8') as file:
-        Status = file.read()
-    return Status
-    
-
-    
-# Define placeholders for the missing functions
-def MicButtonInitiated():
-    SetMicrophoneStatus("False")
-
-def MicButtonClosed():
-    SetMicrophoneStatus("True")
-
-def GraphicsDirectoryPath(Filename):
-    path = rf'{GraphicsDirPath}\{Filename}'
-    return path
-
-
-def TempDirectoryPath(Filename):
-    path = rf'{TempDirPath}\{Filename}'
-    return path
-
-def ShowTextToScreen(Text):
-    with open (rf'{TempDirPath}\Responses.data','w', encoding='utf-8') as file:
-        file.write(Text)
-
-    
 class ChatSection(QWidget):
-    def __init__(self):
+    def __init__(self, gui_update_queue, mic_status_queue):
         super(ChatSection, self).__init__()
+        self.gui_update_queue = gui_update_queue
+        self.mic_status_queue = mic_status_queue
+        self.initUI()
+        
+    def initUI(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(-10, 40, 40, 100)
-        layout.setSpacing(-100)
+        layout.setContentsMargins(20, 40, 40, 100)
+        layout.setSpacing(10)
 
+        # Chat display
         self.chat_text_edit = QTextEdit()
         self.chat_text_edit.setReadOnly(True)
         self.chat_text_edit.setTextInteractionFlags(Qt.NoTextInteraction)
         self.chat_text_edit.setFrameStyle(QFrame.NoFrame)
+        self.chat_text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: rgba(0, 0, 0, 0.8);
+                color: #00FFFF;
+                font-family: 'Courier New';
+                font-size: 14px;
+                border: 2px solid #00FFFF;
+                border-radius: 10px;
+                padding: 10px;
+            }
+        """)
         layout.addWidget(self.chat_text_edit)
 
-        self.setStyleSheet("background-color: black;")
-        layout.setSizeConstraint(QVBoxLayout.SetDefaultConstraint)
-        layout.setStretch(1, 1)
-        self.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
-
-        text_color = QColor(Qt.blue)
-        text_color_text = QTextCharFormat()
-        text_color_text.setForeground(text_color)
-        self.chat_text_edit.setCurrentCharFormat(text_color_text)
-
+        # JARVIS animation
         self.gif_label = QLabel()
         self.gif_label.setStyleSheet("border: none;")
         movie = QMovie(rf"{GraphicsDirPath}\Jarvis.gif")
@@ -119,92 +174,38 @@ class ChatSection(QWidget):
         movie.start()
         layout.addWidget(self.gif_label)
 
-        self.label = QLabel("")
-        self.label.setStyleSheet("color: white; font-size: 16px; margin-right: 195px; border: none; margin-top: -30px;")
-        self.label.setAlignment(Qt.AlignRight)
-        layout.addWidget(self.label)
-
-        font = QFont()
-        font.setPointSize(13)
-        self.chat_text_edit.setFont(font)
-
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.loadMessages)
-        self.timer.timeout.connect(self.SpeechRecogText)
-        self.timer.start(5)
-
-        self.chat_text_edit.viewport().installEventFilter(self)
-        self.setStyleSheet("""
-            QScrollBar:vertical {
-                border: none;
-                background: black;
-                width: 10px;
-                margin: 0px 0px 0px 0px;
-            }
-
-            QScrollBar::handle:vertical {
-                background: white;
-                min-height: 20px;
-            }
-
-            QScrollBar::add-line:vertical {
-                background: black;
-                subcontrol-position: bottom;
-                subcontrol-origin: margin;
-                height: 10px;
-            }
-
-            QScrollBar::sub-line:vertical {
-                background: black;
-                subcontrol-position: top;
-                subcontrol-origin: margin;
-                height: 10px;
-            }
-
-            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-                border: none;
-                background: none;
-                color: none;
-            }
-
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-
+        # Status label
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setStyleSheet("""
+            color: #00FFFF;
+            font-size: 18px;
+            font-weight: bold;
+            font-family: 'Courier New';
+            margin-right: 195px;
+            border: none;
+            margin-top: -30px;
         """)
+        self.status_label.setAlignment(Qt.AlignRight)
+        layout.addWidget(self.status_label)
 
-    def loadMessages(self):
-        global old_chat_message
+        self.setStyleSheet("background-color: black;")
+        
+        # Timer for updating GUI
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_from_queue)
+        self.timer.start(50)  # Update every 50ms for responsiveness
+
+    def update_from_queue(self):
+        """Update GUI from queue messages"""
         try:
-            with open(rf'{TempDirPath}\Responses.data', 'r', encoding='utf-8') as file:
-                messages = file.read()
-            if messages and messages != old_chat_message:
-                self.addMessage(message=messages, color='White')
-                old_chat_message = messages
-        except FileNotFoundError:
+            while not self.gui_update_queue.empty():
+                message_type, content = self.gui_update_queue.get_nowait()
+                if message_type == 'chat':
+                    self.addMessage(content, '#00FFFF')
+                elif message_type == 'status':
+                    self.status_label.setText(content)
+        except queue.Empty:
             pass
-
-    def SpeechRecogText(self):
-        try:
-            with open(rf'{TempDirPath}\Status.data', 'r', encoding='utf-8') as file:
-                messages = file.read()
-            self.label.setText(messages)
-        except FileNotFoundError:
-            pass
-
-    def load_icon(self, path, width=60, height=60):
-        pixmap = QPixmap(path)
-        new_pixmap = pixmap.scaled(width, height)
-        self.icon_label.setPixmap(new_pixmap)
-
-    def toggle_icon(self, event=None):
-        if self.toggled:
-            self.load_icon(rf'{GraphicsDirPath}\voice.png', 60, 60)
-            MicButtonInitiated()
-        else:
-            self.load_icon(rf'{GraphicsDirPath}\mic.png', 60, 60)
-            MicButtonClosed()
-        self.toggled = not self.toggled
 
     def addMessage(self, message, color):
         cursor = self.chat_text_edit.textCursor()
@@ -217,135 +218,170 @@ class ChatSection(QWidget):
         cursor.setBlockFormat(formatm)
         cursor.insertText(message + "\n")
         self.chat_text_edit.setTextCursor(cursor)
-
-
+        # Auto-scroll to bottom
+        scrollbar = self.chat_text_edit.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
 class InitialScreen(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, gui_update_queue, mic_status_queue, parent=None):
         super().__init__(parent)
+        self.gui_update_queue = gui_update_queue
+        self.mic_status_queue = mic_status_queue
+        self.initUI()
+
+    def initUI(self):
         desktop = QApplication.desktop()
         screen_width = desktop.screenGeometry().width()
         screen_height = desktop.screenGeometry().height()
+        
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
 
+        # JARVIS animation
         gif_label = QLabel()
-        movie = QMovie(GraphicsDirPath + r'\Jarvis.gif')  # Fixed this line
+        movie = QMovie(rf'{GraphicsDirPath}\Jarvis.gif')
         gif_label.setMovie(movie)
         max_gif_size_H = int(screen_width / 16 * 9)
         movie.setScaledSize(QSize(screen_width, max_gif_size_H))
         gif_label.setAlignment(Qt.AlignCenter)
         movie.start()
-
         gif_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Microphone button
         self.icon_label = QLabel()
-        pixmap = QPixmap(GraphicsDirPath + r'\Mic_on.png')  # Fixed this line
-        new_pixmap = pixmap.scaled(60, 60)
+        pixmap = QPixmap(rf'{GraphicsDirPath}\Mic_off.png')
+        new_pixmap = pixmap.scaled(80, 80)
         self.icon_label.setPixmap(new_pixmap)
         self.icon_label.setFixedSize(150, 150)
         self.icon_label.setAlignment(Qt.AlignCenter)
-        self.toggled = True
-        self.toggle_icon()
+        self.icon_label.setStyleSheet("""
+            QLabel {
+                border: 3px solid #00FFFF;
+                border-radius: 75px;
+                background-color: rgba(0, 255, 255, 0.1);
+            }
+            QLabel:hover {
+                background-color: rgba(0, 255, 255, 0.2);
+                border-color: #FFFFFF;
+            }
+        """)
+        self.toggled = False
         self.icon_label.mousePressEvent = self.toggle_icon
 
-        self.label = QLabel("")
-        self.label.setStyleSheet("color: white; font-size: 16px; margin-bottom: 0;")
+        # Status label
+        self.status_label = QLabel("Ready to assist...")
+        self.status_label.setStyleSheet("""
+            color: #00FFFF;
+            font-size: 20px;
+            font-weight: bold;
+            font-family: 'Courier New';
+            margin-bottom: 20px;
+        """)
+        self.status_label.setAlignment(Qt.AlignCenter)
+
         content_layout.addWidget(gif_label, alignment=Qt.AlignCenter)
-        content_layout.addWidget(self.label, alignment=Qt.AlignCenter)
+        content_layout.addWidget(self.status_label, alignment=Qt.AlignCenter)
         content_layout.addWidget(self.icon_label, alignment=Qt.AlignCenter)
         content_layout.setContentsMargins(0, 0, 0, 150)
-        self.setLayout(content_layout)
 
         self.setLayout(content_layout)
         self.setFixedHeight(screen_height)
         self.setFixedWidth(screen_width)
         self.setStyleSheet("background-color: black;")
+
+        # Timer for status updates
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.SpeechRecogText)
-        self.timer.start(5)
+        self.timer.timeout.connect(self.update_status)
+        self.timer.start(100)
 
-    def SpeechRecogText(self):
-        with open(TempDirPath + r'\Status.data', 'r', encoding='utf-8') as file:  # Fixed this line
-            messages = file.read()
-            self.label.setText(messages)
+    def update_status(self):
+        """Update status from queue"""
+        try:
+            while not self.gui_update_queue.empty():
+                message_type, content = self.gui_update_queue.get_nowait()
+                if message_type == 'status':
+                    self.status_label.setText(content)
+        except queue.Empty:
+            pass
 
-    def load_icon(self, path, width=60, height=60):
+    def load_icon(self, path, width=80, height=80):
         pixmap = QPixmap(path)
         new_pixmap = pixmap.scaled(width, height)
         self.icon_label.setPixmap(new_pixmap)
 
     def toggle_icon(self, event=None):
         if self.toggled:
-            self.load_icon(GraphicsDirPath + r'\Mic_on.png', 60, 60)  # Fixed this line
-            MicButtonInitiated()  # Ensure this function is defined
+            self.load_icon(rf'{GraphicsDirPath}\Mic_off.png')
+            self.mic_status_queue.put(False)
         else:
-            self.load_icon(GraphicsDirPath + r'\Mic_off.png', 60, 60)  # Fixed this line
-            MicButtonClosed()  # Ensure this function is defined
+            self.load_icon(rf'{GraphicsDirPath}\Mic_on.png')
+            self.mic_status_queue.put(True)
         self.toggled = not self.toggled
 
-
 class MessageScreen(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, gui_update_queue, mic_status_queue, parent=None):
         super().__init__(parent)
+        self.gui_update_queue = gui_update_queue
+        self.mic_status_queue = mic_status_queue
+        self.initUI()
+
+    def initUI(self):
         desktop = QApplication.desktop()
         screen_width = desktop.screenGeometry().width()
         screen_height = desktop.screenGeometry().height()
+        
         layout = QVBoxLayout()
-        label = QLabel("")
-        layout.addWidget(label)
-        chat_section = ChatSection()  # Ensure ChatSection is defined elsewhere
+        chat_section = ChatSection(self.gui_update_queue, self.mic_status_queue)
         layout.addWidget(chat_section)
+        
         self.setLayout(layout)
         self.setStyleSheet("background-color: black;")
         self.setFixedHeight(screen_height)
         self.setFixedWidth(screen_width)
 
-
 class CustomTopBar(QWidget):
     def __init__(self, parent, stacked_widget):
         super().__init__(parent)
         self.stacked_widget = stacked_widget
-        self.current_screen = None
         self.initUI()
 
     def initUI(self):
-        self.setFixedHeight(50)
+        self.setFixedHeight(60)
         layout = QHBoxLayout(self)
         layout.setAlignment(Qt.AlignRight)
 
-        home_button = QPushButton()
-        home_icon = QIcon(GraphicsDirPath + r'\Home.png')
-        home_button.setIcon(home_icon)
-        home_button.setText("   Home")
-        home_button.setStyleSheet("height:40px; line-height:40px; background-color:white; color: black")
+        # JARVIS title
+        title_label = QLabel("J.A.R.V.I.S")
+        title_label.setStyleSheet("""
+            color: #00FFFF;
+            font-size: 24px;
+            font-weight: bold;
+            font-family: 'Courier New';
+            margin-left: 20px;
+        """)
+        layout.addWidget(title_label)
+        layout.addStretch()
+
+        # Navigation buttons
+        home_button = QPushButton("HOME")
+        home_button.setStyleSheet(self.get_button_style())
         home_button.clicked.connect(self.showInitialScreen)
 
-        message_button = QPushButton()
-        message_icon = QIcon(GraphicsDirPath + r'\Message.png')
-        message_button.setIcon(message_icon)
-        message_button.setText("   Message")
-        message_button.setStyleSheet("height:40px; line-height:40px; background-color:white; color: black")
+        message_button = QPushButton("CHAT")
+        message_button.setStyleSheet(self.get_button_style())
         message_button.clicked.connect(self.showMessageScreen)
 
-        minimize_button = QPushButton()
-        minimize_icon = QIcon(GraphicsDirPath + r'\Minimize.png')
-        minimize_button.setIcon(minimize_icon)
-        minimize_button.setFlat(True)
-        minimize_button.setStyleSheet("background-color:white")
+        # Window controls
+        minimize_button = QPushButton("−")
+        minimize_button.setStyleSheet(self.get_control_button_style())
         minimize_button.clicked.connect(self.minimizeWindow)
 
-        self.maximize_button = QPushButton()
-        self.maximize_icon = QIcon(GraphicsDirPath + r'\Maximize.png')
-        self.restore_icon = QIcon(GraphicsDirPath + r'\Restore.png')
-        self.maximize_button.setIcon(self.maximize_icon)
-        self.maximize_button.setFlat(True)
-        self.maximize_button.setStyleSheet("background-color:white")
+        self.maximize_button = QPushButton("□")
+        self.maximize_button.setStyleSheet(self.get_control_button_style())
         self.maximize_button.clicked.connect(self.maximizeWindow)
 
-        close_button = QPushButton()
-        close_icon = QIcon(GraphicsDirPath + r'\Close.png')
-        close_button.setIcon(close_icon)
-        close_button.setStyleSheet("background-color:white")
+        close_button = QPushButton("×")
+        close_button.setStyleSheet(self.get_control_button_style("#FF0000"))
         close_button.clicked.connect(self.closeWindow)
 
         layout.addWidget(home_button)
@@ -354,15 +390,47 @@ class CustomTopBar(QWidget):
         layout.addWidget(self.maximize_button)
         layout.addWidget(close_button)
 
-        self.draggable = True
-        self.offset = None
+        self.setStyleSheet("background-color: rgba(0, 0, 0, 0.9); border-bottom: 2px solid #00FFFF;")
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), Qt.white)
-        super().paintEvent(event)
+    def get_button_style(self):
+        return """
+            QPushButton {
+                background-color: transparent;
+                color: #00FFFF;
+                border: 2px solid #00FFFF;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: 'Courier New';
+                border-radius: 5px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 255, 255, 0.2);
+                color: white;
+            }
+            QPushButton:pressed {
+                background-color: rgba(0, 255, 255, 0.4);
+            }
+        """
 
-
+    def get_control_button_style(self, color="#00FFFF"):
+        return f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {color};
+                border: 2px solid {color};
+                padding: 8px 12px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 5px;
+                margin: 5px;
+                min-width: 30px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.2);
+            }}
+        """
 
     def minimizeWindow(self):
         self.parent().showMinimized()
@@ -370,24 +438,25 @@ class CustomTopBar(QWidget):
     def maximizeWindow(self):
         if self.parent().isMaximized():
             self.parent().showNormal()
-            self.maximize_button.setIcon(self.maximize_icon)
+            self.maximize_button.setText("□")
         else:
             self.parent().showMaximized()
-            self.maximize_button.setIcon(self.restore_icon)
+            self.maximize_button.setText("❐")
 
     def closeWindow(self):
         self.parent().close()
 
     def showMessageScreen(self):
-        self.stacked_widget.setCurrentIndex(1)
+        self.stacked_widget.setCurrentIndex(2)
 
     def showInitialScreen(self):
-        self.stacked_widget.setCurrentIndex(0)
-
+        self.stacked_widget.setCurrentIndex(1)
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, gui_update_queue, mic_status_queue):
         super(MainWindow, self).__init__()
+        self.gui_update_queue = gui_update_queue
+        self.mic_status_queue = mic_status_queue
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.initUI()
 
@@ -395,26 +464,50 @@ class MainWindow(QMainWindow):
         desktop = QApplication.desktop()
         screen_width = desktop.screenGeometry().width()
         screen_height = desktop.screenGeometry().height()
-        stacked_widget = QStackedWidget(self)
-        initial_screen = InitialScreen()
-        message_screen = MessageScreen()
-        stacked_widget.addWidget(initial_screen)
-        stacked_widget.addWidget(message_screen)
+        
+        self.stacked_widget = QStackedWidget(self)
+        
+        # Authentication screen
+        auth_screen = AuthenticationScreen(on_success=self.show_main_interface)
+        self.stacked_widget.addWidget(auth_screen)
+        
+        # Main screens
+        initial_screen = InitialScreen(self.gui_update_queue, self.mic_status_queue)
+        message_screen = MessageScreen(self.gui_update_queue, self.mic_status_queue)
+        
+        self.stacked_widget.addWidget(initial_screen)
+        self.stacked_widget.addWidget(message_screen)
+        
         self.setGeometry(0, 0, screen_width, screen_height)
         self.setStyleSheet("background-color: black;")
-        top_bar = CustomTopBar(self, stacked_widget)
+        
+        # Top bar
+        top_bar = CustomTopBar(self, self.stacked_widget)
         self.setMenuWidget(top_bar)
-        self.setCentralWidget(stacked_widget)
+        self.setCentralWidget(self.stacked_widget)
+        
+        # Start with authentication
+        self.stacked_widget.setCurrentIndex(0)
+    
+    def show_main_interface(self):
+        """Show main interface after authentication"""
+        self.stacked_widget.setCurrentIndex(1)
 
-def GraphicalUserInterface():
+def GraphicalUserInterface(gui_update_queue, mic_status_queue):
+    """Main GUI function"""
     app = QApplication(sys.argv)
-    window = MainWindow()
+    
+    # Set application properties
+    app.setApplicationName("JARVIS AI Assistant")
+    app.setApplicationVersion("2.0")
+    
+    window = MainWindow(gui_update_queue, mic_status_queue)
     window.show()
+    
     sys.exit(app.exec_())
-# Run the application
+
 if __name__ == "__main__":
-    import sys
-    app = QApplication(sys.argv)
-    main_window = MainWindow()
-    main_window.show()
-    sys.exit(app.exec_())
+    # Test GUI
+    gui_queue = queue.Queue()
+    mic_queue = queue.Queue()
+    GraphicalUserInterface(gui_queue, mic_queue)

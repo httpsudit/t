@@ -1,26 +1,20 @@
-from Frontend.GUI import (
-    GraphicalUserInterface,
-    SetAsssistantStatus,
-    ShowTextToScreen,
-    TempDirectoryPath,
-    SetMicrophoneStatus,
-    AnswerModifier,
-    QueryModifier,
-    GetMicrophoneStatus,
-    GetAssistantStatus,
-)
+from Frontend.GUI import GraphicalUserInterface
 from Backend.Model import FirstLayerDMM
 from Backend.RealtimeSearchEngine import RealtimeSearchEngine
 from Backend.Automation import Automation
-from Backend.SpeechToText import SpeechRecognition
+from Backend.VoiceRecognition import SpeechRecognition
 from Backend.Chatbot import ChatBot
 from Backend.TextToSpeech import TextToSpeech
+from Backend.FaceAuthentication import authenticate_user
+from Backend.Utils import AnswerModifier, QueryModifier
 from dotenv import dotenv_values
 from asyncio import run
 from time import sleep
 import subprocess
 import threading
 import json
+import queue
+import sys
 import os
 
 # Load environment variables
@@ -28,33 +22,31 @@ env_vars = dotenv_values(".env")
 Username = env_vars.get("Username", "User")
 Assistantname = env_vars.get("Assistantname", "Assistant")
 
-DefaultMessage = f""" {Username}: Hello {Assistantname}, How are you?
-{Assistantname}: Welcome {Username}. I am doing well. How may I help you? """
+DefaultMessage = f"""{Username}: Hello {Assistantname}, How are you?
+{Assistantname}: Welcome {Username}. I am doing well. How may I help you?"""
 
 functions = ["open", "close", "play", "system", "content", "google search", "youtube search"]
 subprocess_list = []
 
+# Global queues for inter-thread communication
+gui_update_queue = queue.Queue()
+mic_status_queue = queue.Queue()
 
-
-# Ensure a default chat log exists if no chats are logged
 def ShowDefaultChatIfNoChats():
+    """Ensure a default chat log exists if no chats are logged"""
     try:
         with open(r'Data\ChatLog.json', "r", encoding='utf-8') as file:
             if len(file.read()) < 5:
-                with open(TempDirectoryPath('Database.data'), 'w', encoding='utf-8') as temp_file:
-                    temp_file.write("")
-                with open(TempDirectoryPath('Responses.data'), 'w', encoding='utf-8') as response_file:
-                    response_file.write(DefaultMessage)
+                gui_update_queue.put(('chat', DefaultMessage))
     except FileNotFoundError:
         print("ChatLog.json file not found. Creating default response.")
         os.makedirs("Data", exist_ok=True)
         with open(r'Data\ChatLog.json', "w", encoding='utf-8') as file:
             file.write("[]")
-        with open(TempDirectoryPath('Responses.data'), 'w', encoding='utf-8') as response_file:
-            response_file.write(DefaultMessage)
+        gui_update_queue.put(('chat', DefaultMessage))
 
-# Read chat log from JSON
 def ReadChatLogJson():
+    """Read chat log from JSON"""
     try:
         with open(r'Data\ChatLog.json', 'r', encoding='utf-8') as file:
             chatlog_data = json.load(file)
@@ -63,10 +55,8 @@ def ReadChatLogJson():
         print("ChatLog.json not found.")
         return []
 
-# Integrate chat logs into a readable format
-
-
 def ChatLogIntegration():
+    """Integrate chat logs into a readable format"""
     json_data = ReadChatLogJson()
     formatted_chatlog = ""
     for entry in json_data:
@@ -75,68 +65,67 @@ def ChatLogIntegration():
         elif entry["role"] == "assistant":
             formatted_chatlog += f"{Assistantname}: {entry['content']}\n"
 
-    # Ensure the Temp directory exists
-    temp_dir_path = TempDirectoryPath('')  # Get the directory path
-    if not os.path.exists(temp_dir_path):
-        os.makedirs(temp_dir_path)
+    if formatted_chatlog:
+        gui_update_queue.put(('chat', AnswerModifier(formatted_chatlog)))
 
-    with open(TempDirectoryPath('Database.data'), 'w', encoding='utf-8') as file:
-        file.write(AnswerModifier(formatted_chatlog))
-
-# Display the chat on the GUI
-def ShowChatOnGUI():
-    try:
-        with open(TempDirectoryPath('Database.data'), 'r', encoding='utf-8') as file:
-            data = file.read()
-        if len(str(data)) > 0:
-            with open(TempDirectoryPath('Responses.data'), 'w', encoding='utf-8') as response_file:
-                response_file.write(data)
-    except FileNotFoundError:
-        print("Database.data file not found.")
-
-# Initial execution setup
 def InitialExecution():
-    SetMicrophoneStatus("False")
-    ShowTextToScreen("")
+    """Initial execution setup"""
+    print("Initializing JARVIS...")
+    gui_update_queue.put(('status', "Initializing..."))
+    
+    # Ensure Data directory exists
+    os.makedirs("Data", exist_ok=True)
+    os.makedirs("Data/Faces", exist_ok=True)
+    
     ShowDefaultChatIfNoChats()
     ChatLogIntegration()
-    ShowChatOnGUI()
+    
+    gui_update_queue.put(('status', "Ready to assist..."))
+    print("JARVIS initialized successfully!")
 
-# Main execution logic
 def MainExecution():
+    """Main execution logic"""
     try:
         TaskExecution = False
         ImageExecution = False
         ImageGenerationQuery = ""
 
-        SetAsssistantStatus("Listening...")
-        Query = SpeechRecognition()
-        ShowTextToScreen(f"{Username}: {Query}")
-        SetAsssistantStatus("Thinking...")
+        gui_update_queue.put(('status', "Listening..."))
+        Query = SpeechRecognition(gui_update_queue)
+        
+        if not Query:
+            return False
+            
+        gui_update_queue.put(('chat', f"{Username}: {Query}"))
+        gui_update_queue.put(('status', "Thinking..."))
+        
         Decision = FirstLayerDMM(Query)
-
         print(f"\nDecision: {Decision}\n")
 
         G = any([i for i in Decision if i.startswith("general")])
         R = any([i for i in Decision if i.startswith("realtime")])
 
-
         Merged_query = " and ".join(
             [" ".join(i.split()[1:]) for i in Decision if i.startswith("general") or i.startswith("realtime")]
         )
 
+        # Check for image generation
         for queries in Decision:
             if "generate" in queries:
                 ImageGenerationQuery = str(queries)
                 ImageExecution = True
 
+        # Check for automation tasks
         for queries in Decision:
             if not TaskExecution:
                 if any(queries.startswith(func) for func in functions):
+                    gui_update_queue.put(('status', "Executing commands..."))
                     run(Automation(list(Decision)))
                     TaskExecution = True
 
+        # Handle image generation
         if ImageExecution:
+            gui_update_queue.put(('status', "Generating images..."))
             with open(r'Frontend\Files\ImageGeneration.data', "w") as file:
                 file.write(f"{ImageGenerationQuery},True")
 
@@ -152,80 +141,110 @@ def MainExecution():
             except Exception as e:
                 print(f"Error starting ImageGeneration.py: {e}")
 
+        # Handle queries
         if G and R or R:
-            SetAsssistantStatus("Searching...")
+            gui_update_queue.put(('status', "Searching..."))
             Answer = RealtimeSearchEngine(QueryModifier(Merged_query))
-            ShowTextToScreen(f"{Assistantname}: {Answer}")
-            SetAsssistantStatus("Answering...")
+            gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
+            gui_update_queue.put(('status', "Speaking..."))
             TextToSpeech(Answer)
             return True
         else:
             for queries in Decision:
                 if "general" in queries:
-                    SetAsssistantStatus("Thinking...")
+                    gui_update_queue.put(('status', "Thinking..."))
                     QueryFinal = queries.replace("general", "")
                     Answer = ChatBot(QueryModifier(QueryFinal))
-                    ShowTextToScreen(f"{Assistantname}: {Answer}")
-                    SetAsssistantStatus("Answering...")
+                    gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
+                    gui_update_queue.put(('status', "Speaking..."))
                     TextToSpeech(Answer)
                     return True
                 elif "realtime" in queries:
-                    SetAsssistantStatus("Searching...")
+                    gui_update_queue.put(('status', "Searching..."))
                     QueryFinal = queries.replace("realtime", "")
                     Answer = RealtimeSearchEngine(QueryModifier(QueryFinal))
-                    ShowTextToScreen(f"{Assistantname}: {Answer}")
-                    SetAsssistantStatus("Answering...")
+                    gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
+                    gui_update_queue.put(('status', "Speaking..."))
                     TextToSpeech(Answer)
                     return True
                 elif "exit" in queries:
-                    QueryFinal = "Okay, Bye!"
+                    QueryFinal = "Goodbye! It was nice talking to you."
                     Answer = ChatBot(QueryModifier(QueryFinal))
-                    ShowTextToScreen(f"{Assistantname}: {Answer}")
-                    SetAsssistantStatus("Answering...")
+                    gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
+                    gui_update_queue.put(('status', "Goodbye..."))
                     TextToSpeech(Answer)
-                    os._exit(1)
+                    sys.exit(0)
+                    
     except Exception as e:
         print(f"Error in MainExecution: {e}")
+        gui_update_queue.put(('status', "Error occurred"))
+        return False
 
-# Thread for primary execution loop
 def FirstThread():
+    """Thread for primary execution loop"""
+    mic_listening = False
+    
     while True:
         try:
-            CurrentStatus = GetMicrophoneStatus()
-            print(f"Current Microphone Status: {CurrentStatus}")  # Debugging
+            # Check microphone status from GUI
+            try:
+                mic_status = mic_status_queue.get_nowait()
+                mic_listening = mic_status
+                print(f"Microphone status changed: {mic_listening}")
+            except queue.Empty:
+                pass
 
-            if CurrentStatus.lower() == "true":  # Case-insensitive comparison
-                print("Executing MainExecution")  # Debugging
+            if mic_listening:
+                print("Executing MainExecution")
                 MainExecution()
-            elif CurrentStatus.lower() == "false":
-                AIStatus = GetAssistantStatus()
-                print(f"Current Assistant Status: {AIStatus}")  # Debugging
-
-                if "Available..." in AIStatus:
-                    sleep(0.1)
-                else:
-                    print("Setting Assistant Status to 'Available...'")  # Debugging
-                    SetAsssistantStatus("Available...")
+                mic_listening = False  # Reset after processing
             else:
-                print("Unexpected Microphone Status value. Defaulting to 'False'.")  # Debugging
+                gui_update_queue.put(('status', "Ready to assist..."))
+                sleep(0.1)
+                
         except Exception as e:
             print(f"Error in FirstThread: {e}")
-            sleep(1)  # Avoid infinite rapid errors
+            sleep(1)
 
-
-
-# Thread for GUI execution
 def SecondThread():
+    """Thread for GUI execution"""
     try:
-        GraphicalUserInterface()
+        GraphicalUserInterface(gui_update_queue, mic_status_queue)
     except Exception as e:
         print(f"Error in SecondThread: {e}")
 
-# Entry point
-if __name__ == "__main__":
-    InitialExecution()
-   
-    thread1 = threading.Thread(target=FirstThread, daemon=True)
-    thread1.start()
-    SecondThread()
+def AuthenticationThread():
+    """Thread for face authentication"""
+    print("Starting face authentication...")
+    gui_update_queue.put(('status', "Authenticating..."))
     
+    # For now, we'll skip actual face authentication and proceed
+    # In production, uncomment the line below:
+    # success = authenticate_user()
+    success = True  # Skip authentication for testing
+    
+    if success:
+        print("Authentication successful!")
+        gui_update_queue.put(('status', "Authentication successful!"))
+        return True
+    else:
+        print("Authentication failed!")
+        gui_update_queue.put(('status', "Authentication failed!"))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    print("Starting JARVIS AI Assistant...")
+    
+    # Initialize
+    InitialExecution()
+    
+    # Start authentication (in background for now)
+    auth_thread = threading.Thread(target=AuthenticationThread, daemon=True)
+    auth_thread.start()
+    
+    # Start main execution thread
+    main_thread = threading.Thread(target=FirstThread, daemon=True)
+    main_thread.start()
+    
+    # Start GUI (main thread)
+    SecondThread()

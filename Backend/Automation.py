@@ -35,11 +35,13 @@ messages = []
 
 SystemChatBot = [{"role": "system", "content": f"Hello, I am {os.environ.get('Username', 'User')}, a content writer. You have to write content like letters, codes, applications, essays, notes, songs, poems, etc."}]
 
-
 def GoogleSearch(topic):
-    search(topic)
-    return True
-
+    try:
+        search(topic)
+        return True
+    except Exception as e:
+        print(f"Error in Google search: {e}")
+        return False
 
 def Content(topic):
     def OpenNotepad(file):
@@ -104,12 +106,14 @@ def Content(topic):
         print(f"Error writing content to file: {e}")
         return False
 
-# Content("write A application for sick leave")
 def YouTubeSearch(topic):
-    url = f"https://www.youtube.com/results?search_query={topic}"
-    webbrowser.open(url)
-    return True
-
+    try:
+        url = f"https://www.youtube.com/results?search_query={topic}"
+        webbrowser.open(url)
+        return True
+    except Exception as e:
+        print(f"Error in YouTube search: {e}")
+        return False
 
 def PlayYoutube(query):
     try:
@@ -119,109 +123,44 @@ def PlayYoutube(query):
         print(f"Error playing YouTube video: {e}")
         return False
 
-
-# Assuming `AppOpener` and `webopen` are defined or imported
-import webbrowser
-import requests
-from bs4 import BeautifulSoup
-import subprocess
-import os
-import platform
-
-import webbrowser
-import requests
-from bs4 import BeautifulSoup
-import subprocess
-import os
-import platform
-
 def OpenApp(app, sess=requests.session()):
-    
     try:
         # Try to open the app using AppOpener
         appopen(app, match_closest=True, output=True, throw_error=True)
+        print(f"Opened {app} successfully")
         return True
 
-    except:
+    except Exception as e:
+        print(f"AppOpener failed for {app}: {e}")
+        
         def extract_links(html):
             if html is None:
                 return []
             soup = BeautifulSoup(html, 'html.parser')
-            # Find all anchors with valid href attributes
             links = soup.find_all('a', href=True)
             return [link.get('href') for link in links]
             
         def search_google(query):
             url = f"https://www.microsoft.com/en-us/search?q={query}"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
-            response = sess.get(url, headers=headers)
-            if response.status_code == 200:
-                return response.text
-            else:
-                print("Failed to retrieve search results.")
+            headers = {"User-Agent": useragent}
+            try:
+                response = sess.get(url, headers=headers)
+                if response.status_code == 200:
+                    return response.text
+                else:
+                    print("Failed to retrieve search results.")
+                    return None
+            except Exception as e:
+                print(f"Search error: {e}")
                 return None
 
-        def open_in_chrome_beta(url):
-            """Open URL specifically in Google Chrome Beta"""
-            system = platform.system()
-            
+        def open_in_browser(url):
             try:
-                if system == "Windows":
-                    # Common Chrome Beta paths on Windows
-                    chrome_beta_paths = [
-                        r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
-                        r"C:\Program Files (x86)\Google\Chrome Beta\Application\chrome.exe",
-                        os.path.expanduser(r"~\AppData\Local\Google\Chrome Beta\Application\chrome.exe")
-                    ]
-                    
-                    for path in chrome_beta_paths:
-                        if os.path.exists(path):
-                            subprocess.run([path, url])
-                            return True
-                    
-                    # Fallback to regular Chrome if Beta not found
-                    chrome_stable_paths = [
-                        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                        os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe")
-                    ]
-                    
-                    for path in chrome_stable_paths:
-                        if os.path.exists(path):
-                            print("Chrome Beta not found, using stable Chrome")
-                            subprocess.run([path, url])
-                            return True
-                
-                elif system == "Darwin":  # macOS
-                    # Try Chrome Beta first
-                    try:
-                        subprocess.run(["open", "-a", "Google Chrome Beta", url])
-                        return True
-                    except:
-                        print("Chrome Beta not found, trying stable Chrome")
-                        subprocess.run(["open", "-a", "Google Chrome", url])
-                        return True
-                
-                elif system == "Linux":
-                    # Try Chrome Beta first
-                    try:
-                        subprocess.run(["google-chrome-beta", url])
-                        return True
-                    except:
-                        print("Chrome Beta not found, trying stable Chrome")
-                        subprocess.run(["google-chrome", url])
-                        return True
-                
-                # Final fallback to default browser
-                print("Chrome Beta and stable Chrome not found, opening in default browser")
                 webbrowser.open(url)
                 return True
-                
             except Exception as e:
-                print(f"Error opening Chrome Beta: {e}")
-                # Final fallback
-                webbrowser.open(url)
-                return True
+                print(f"Error opening browser: {e}")
+                return False
 
         # Attempt a search for the app
         html = search_google(app)
@@ -229,17 +168,19 @@ def OpenApp(app, sess=requests.session()):
             links = extract_links(html)
             if links:
                 link = links[0]
-                open_in_chrome_beta(link)
-        return True
-# OpenApp("instagram")
+                return open_in_browser(link)
+        
+        print(f"Failed to open {app}")
+        return False
+
 def CloseApp(app):
     if "chrome" in app.lower():
         try:
             subprocess.run(["taskkill", "/f", "/im", "chrome.exe"], check=True)
             print(f"Closed Chrome using taskkill")
             return True
-        except:
-            pass
+        except Exception as e:
+            print(f"Error closing Chrome: {e}")
     
     try:
         close(app, match_closest=True, output=True, throw_error=True)
@@ -248,7 +189,6 @@ def CloseApp(app):
     except Exception as e:
         print(f"Error closing {app}: {e}")
         return False
-
 
 def System(command):
     def mute():
@@ -281,7 +221,6 @@ def System(command):
     except Exception as e:
         print(f"Error executing system command {command}: {e}")
         return False
-
 
 async def TranslateAndExecute(commands: list[str]):
     funcs = []
@@ -331,7 +270,6 @@ async def TranslateAndExecute(commands: list[str]):
     else:
         print("No valid commands to execute")
 
-
 async def Automation(commands: list[str]):
     print(f"Starting automation with commands: {commands}")
     results = []
@@ -340,13 +278,11 @@ async def Automation(commands: list[str]):
     print(f"Automation completed. Results: {results}")
     return True
 
-
-# if __name__ == "__main__":
-#     # Test with some commands
-#     test_commands = [
-#         "open notepad", 
-#         " content application for sick leave"
-#     ]
+if __name__ == "__main__":
+    test_commands = [
+        "open notepad", 
+        "content application for sick leave"
+    ]
     
-#     print("Testing automation...")
-#     asyncio.run(Automation(test_commands))
+    print("Testing automation...")
+    asyncio.run(Automation(test_commands))

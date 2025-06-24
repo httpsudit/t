@@ -2,6 +2,7 @@ from googlesearch import search
 from groq import Groq
 from json import load, dump
 import datetime
+from Backend.Utils import AnswerModifier
 from dotenv import dotenv_values
 
 env_vars = dotenv_values(".env")
@@ -14,7 +15,8 @@ client = Groq(api_key=GroqAPIKey)
 
 System = f"""Hello, I am {Username}, You are a very accurate and advanced AI chatbot named {Assistantname} which has real-time up-to-date information from the internet.
 *** Provide Answers In a Professional Way, make sure to add full stops, commas, question marks, and use proper grammar.***
-*** Just answer the question from the provided data in a professional way. ***"""
+*** Just answer the question from the provided data in a professional way. ***
+*** You are JARVIS, an advanced AI assistant. Be professional, intelligent, and helpful. ***"""
 
 try:
     with open(r"Data\ChatLog.json", "r") as f:
@@ -32,12 +34,6 @@ def GoogleSearch(query):
 
     Answer += "[end]"
     return Answer
-
-def AnswerModifier(Answer):
-    lines = Answer.split('\n')
-    non_empty_lines = [line for line in lines if line.strip()]
-    modified_answer = '\n'.join(non_empty_lines)
-    return modified_answer
 
 SystemChatBot = [
     {"role": "system", "content": System},
