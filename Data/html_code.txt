@@ -1,0 +1,98 @@
+Here's an example of a more complex HTML code that includes a header, navigation bar, main content area, and a footer:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Website</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #f0f0f0;
+            padding: 20px;
+            text-align: center;
+        }
+        nav {
+            background-color: #333;
+            padding: 10px;
+            text-align: center;
+        }
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            margin: 10px;
+        }
+        main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        footer {
+            background-color: #f0f0f0;
+            padding: 10px;
+            text-align: center;
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>My Website</h1>
+    </header>
+    <nav>
+        <a href="#">Home</a>
+        <a href="#">About</a>
+        <a href="#">Contact</a>
+    </nav>
+    <main>
+        <h2>Welcome to My Website</h2>
+        <p>This is a paragraph of text on my website.</p>
+        <button>Click Me</button>
+        <ul>
+            <li>Item 1</li>
+            <li>Item 2</li>
+            <li>Item 3</li>
+        </ul>
+        <img src="image.jpg" alt="An image on my website">
+        <a href="https://www.example.com">Visit Example Website</a>
+    </main>
+    <footer>
+        <p>&copy; 2024 My Website</p>
+    </footer>
+</body>
+</html>
+```
+
+This code includes:
+
+* A `header` element with a heading and background color
+* A `nav` element with links to different pages
+* A `main` element with a heading, paragraph, button, unordered list, image, and link
+* A `footer` element with a copyright notice and background color
+* CSS styles to layout and design the elements
+
+You can save this code as an HTML file and open it in a web browser to see the result.
+
+Do you have any specific questions about this code or would you like to learn more about HTML and CSS? 
+
+Here are some common HTML elements:
+
+1. **Headings**: `h1`, `h2`, `h3`, `h4`, `h5`, `h6`
+2. **Paragraphs**: `p`
+3. **Links**: `a`
+4. **Images**: `img`
+5. **Lists**: `ul`, `ol`, `li`
+6. **Buttons**: `button`
+7. **Forms**: `form`, `input`, `textarea`, `select`
+8. **Tables**: `table`, `tr`, `td`
+9. **Divisions**: `div`
+10. **Spans**: `span`
+
+Let me know if you'd like to learn more about any of these elements or if you have any other questions!
