@@ -20,3 +20,6 @@ opencv-python
 face-recognition
 speechrecognition
 pyaudio
+psutil
+wmi
+pywin32

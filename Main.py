@@ -2,6 +2,7 @@ from Frontend.GUI import GraphicalUserInterface
 from Backend.Model import FirstLayerDMM
 from Backend.RealtimeSearchEngine import RealtimeSearchEngine
 from Backend.Automation import Automation
+from Backend.AdvancedAutomation import ProcessAdvancedCommand
 from Backend.VoiceRecognition import SpeechRecognition
 from Backend.Chatbot import ChatBot
 from Backend.TextToSpeech import TextToSpeech
@@ -23,9 +24,9 @@ Username = env_vars.get("Username", "User")
 Assistantname = env_vars.get("Assistantname", "Assistant")
 
 DefaultMessage = f"""{Username}: Hello {Assistantname}, How are you?
-{Assistantname}: Welcome {Username}. I am doing well. How may I help you?"""
+{Assistantname}: Welcome {Username}. I am your advanced AI assistant with full system access. I can help you with anything from basic conversations to complex system operations. How may I assist you today?"""
 
-functions = ["open", "close", "play", "system", "content", "google search", "youtube search"]
+functions = ["open", "close", "play", "system", "content", "google search", "youtube search", "advanced_system"]
 subprocess_list = []
 
 # Global queues for inter-thread communication
@@ -70,8 +71,8 @@ def ChatLogIntegration():
 
 def InitialExecution():
     """Initial execution setup"""
-    print("Initializing JARVIS...")
-    gui_update_queue.put(('status', "Initializing..."))
+    print("Initializing JARVIS Advanced AI Assistant...")
+    gui_update_queue.put(('status', "Initializing JARVIS..."))
     
     # Ensure Data directory exists
     os.makedirs("Data", exist_ok=True)
@@ -80,14 +81,15 @@ def InitialExecution():
     ShowDefaultChatIfNoChats()
     ChatLogIntegration()
     
-    gui_update_queue.put(('status', "Ready to assist..."))
-    print("JARVIS initialized successfully!")
+    gui_update_queue.put(('status', "JARVIS ready with full system access..."))
+    print("JARVIS initialized successfully with advanced capabilities!")
 
-def MainExecution():
-    """Main execution logic"""
+async def MainExecution():
+    """Main execution logic with advanced system capabilities"""
     try:
         TaskExecution = False
         ImageExecution = False
+        AdvancedSystemExecution = False
         ImageGenerationQuery = ""
 
         gui_update_queue.put(('status', "Listening..."))
@@ -97,17 +99,30 @@ def MainExecution():
             return False
             
         gui_update_queue.put(('chat', f"{Username}: {Query}"))
-        gui_update_queue.put(('status', "Thinking..."))
+        gui_update_queue.put(('status', "Analyzing command..."))
         
         Decision = FirstLayerDMM(Query)
         print(f"\nDecision: {Decision}\n")
 
         G = any([i for i in Decision if i.startswith("general")])
         R = any([i for i in Decision if i.startswith("realtime")])
+        A = any([i for i in Decision if i.startswith("advanced_system")])
 
         Merged_query = " and ".join(
             [" ".join(i.split()[1:]) for i in Decision if i.startswith("general") or i.startswith("realtime")]
         )
+
+        # Check for advanced system commands
+        for queries in Decision:
+            if queries.startswith("advanced_system"):
+                AdvancedSystemExecution = True
+                gui_update_queue.put(('status', "Executing advanced system command..."))
+                command_text = queries.replace("advanced_system", "").strip()
+                result = await ProcessAdvancedCommand(command_text)
+                gui_update_queue.put(('chat', f"{Assistantname}: {result}"))
+                gui_update_queue.put(('status', "Command executed successfully"))
+                TextToSpeech("Command executed successfully")
+                return True
 
         # Check for image generation
         for queries in Decision:
@@ -115,10 +130,10 @@ def MainExecution():
                 ImageGenerationQuery = str(queries)
                 ImageExecution = True
 
-        # Check for automation tasks
+        # Check for basic automation tasks
         for queries in Decision:
             if not TaskExecution:
-                if any(queries.startswith(func) for func in functions):
+                if any(queries.startswith(func) for func in ["open", "close", "play", "system", "content", "google search", "youtube search"]):
                     gui_update_queue.put(('status', "Executing commands..."))
                     run(Automation(list(Decision)))
                     TaskExecution = True
@@ -143,7 +158,7 @@ def MainExecution():
 
         # Handle queries
         if G and R or R:
-            gui_update_queue.put(('status', "Searching..."))
+            gui_update_queue.put(('status', "Searching for real-time information..."))
             Answer = RealtimeSearchEngine(QueryModifier(Merged_query))
             gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
             gui_update_queue.put(('status', "Speaking..."))
@@ -152,7 +167,7 @@ def MainExecution():
         else:
             for queries in Decision:
                 if "general" in queries:
-                    gui_update_queue.put(('status', "Thinking..."))
+                    gui_update_queue.put(('status', "Processing query..."))
                     QueryFinal = queries.replace("general", "")
                     Answer = ChatBot(QueryModifier(QueryFinal))
                     gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
@@ -160,7 +175,7 @@ def MainExecution():
                     TextToSpeech(Answer)
                     return True
                 elif "realtime" in queries:
-                    gui_update_queue.put(('status', "Searching..."))
+                    gui_update_queue.put(('status', "Searching for information..."))
                     QueryFinal = queries.replace("realtime", "")
                     Answer = RealtimeSearchEngine(QueryModifier(QueryFinal))
                     gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
@@ -168,7 +183,7 @@ def MainExecution():
                     TextToSpeech(Answer)
                     return True
                 elif "exit" in queries:
-                    QueryFinal = "Goodbye! It was nice talking to you."
+                    QueryFinal = "Goodbye! It was nice talking to you. JARVIS signing off."
                     Answer = ChatBot(QueryModifier(QueryFinal))
                     gui_update_queue.put(('chat', f"{Assistantname}: {Answer}"))
                     gui_update_queue.put(('status', "Goodbye..."))
@@ -196,10 +211,10 @@ def FirstThread():
 
             if mic_listening:
                 print("Executing MainExecution")
-                MainExecution()
+                run(MainExecution())
                 mic_listening = False  # Reset after processing
             else:
-                gui_update_queue.put(('status', "Ready to assist..."))
+                gui_update_queue.put(('status', "Ready to assist with full system access..."))
                 sleep(0.1)
                 
         except Exception as e:
@@ -233,7 +248,17 @@ def AuthenticationThread():
         sys.exit(1)
 
 if __name__ == "__main__":
-    print("Starting JARVIS AI Assistant...")
+    print("Starting JARVIS Advanced AI Assistant with Full System Access...")
+    print("Capabilities:")
+    print("- Natural Language Processing")
+    print("- Full Hardware Control")
+    print("- Software Management")
+    print("- Process Control")
+    print("- File System Operations")
+    print("- Network Operations")
+    print("- System Monitoring")
+    print("- Power Management")
+    print("- And much more...")
     
     # Initialize
     InitialExecution()
